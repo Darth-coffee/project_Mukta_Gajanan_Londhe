@@ -2,7 +2,7 @@ import os
 import torch
 from PIL import Image
 import numpy as np
-from model import SimpleCNN  # ✅ Use your custom CNN model here
+from model import DeeperCNN  # ✅ Use your custom CNN model here
 from config import CHECKPOINT_PATH, DATA_DIR
 
 # === Device and Model ===
