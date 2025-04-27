@@ -25,8 +25,8 @@ that have noise or other loud sounds, making analysis more efficient
 present, False = No song).
 
 ## Data Source:
-The dataset will primarily consist of 5288 syllable images provided by the Rajan Lab. (dimensions: 600x200)
-The dataset is available on this drive link https://drive.google.com/drive/folders/1ZuLzsaUbUfqQ1Ovi4HSAmKbIJv4GQTAl?usp=sharings
+The dataset will primarily consist of 5288 syllable images provided by the Rajan Lab and 2400 noise images. (dimensions: 600x200)
+The syllable and noise images are available in the 'dataset' folder in the repository.
 
 ## Model Architecture Choice:
 ### Primary Model: Custom 10-Layer CNN for Song Classification
