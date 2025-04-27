@@ -17,7 +17,7 @@ def train_model():
     lr = config.LEARNING_RATE
     device = config.DEVICE
 
-    train_dir = config.TRAIN_DIR
+    train_dir = config.TEST_POSITIVE_DIR
     test_pos_dir = config.TEST_POSITIVE_DIR
     test_neg_dir = config.TEST_NEGATIVE_DIR
     checkpoint_dir = config.CHECKPOINT_DIR
