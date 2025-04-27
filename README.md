@@ -16,7 +16,7 @@ that have noise or other loud sounds, making analysis more efficient
 1. 20 second audio files are processed as syllables can be clearly seen when the spectrogram is formed. 
 2. The trainnig data is actually spectrograms broken down into syllables. For this the spectrogram was first plotted and then broken into syllable fragments, as the noise fragments obtained this way have a colour scheme consistent with the syllable fragments. This is becasue usually sectrogram plotting scripts asigns colours based on the relative intensity at that frequency.
 3. The data folder has positive (syllables) and negative (noise) test images.
-4. In proper application of this CNN, I will also include a script that converts audio files into spectrograms, uses a sliding window of syllable dimensions on this spectrogram and feeds each image to the network. The script is present in the repository for your reference.
+4. In proper application of this CNN, I will also include a script that converts audio files into spectrograms, uses a sliding window of syllable dimensions on this spectrogram and feeds each image to the network. The script is present in the repository for your reference (spectrogram_plot.py).
 
 ## Input-Output Statement:
  
@@ -25,8 +25,8 @@ that have noise or other loud sounds, making analysis more efficient
 present, False = No song).
 
 ## Data Source:
-The dataset will primarily consist of 5288 syllable images provided by the Rajan Lab. (dimensions: 600x200)
-The dataset is available on this drive link https://drive.google.com/drive/folders/1ZuLzsaUbUfqQ1Ovi4HSAmKbIJv4GQTAl?usp=sharings
+The dataset will primarily consist of 5288 syllable images provided by the Rajan Lab and 2400 noise images. (dimensions: 600x200)
+The syllable and noise images are available in the 'dataset' folder in the repository.
 
 ## Model Architecture Choice:
 ### Primary Model: Custom 10-Layer CNN for Song Classification

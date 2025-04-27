@@ -1,134 +1,153 @@
-import os
+# train.py
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torch.utils.data import DataLoader, random_split, ConcatDataset
+from torch.utils.data import DataLoader, WeightedRandomSampler, random_split
+from sklearn.metrics import accuracy_score, f1_score, confusion_matrix, ConfusionMatrixDisplay
 import matplotlib.pyplot as plt
-from sklearn.metrics import f1_score
+from tqdm import tqdm
+import numpy as np
+import os
 
-from dataset import SyllableDataset
-from model import DeeperCNN
-import config  # ← importing config variables
+from LV_dataset import SyllableDataset
+from LV_model import DeeperCNN
+from LV_config import *
 
 def train_model():
-    # === Load config ===
-    batch_size = config.BATCH_SIZE
-    epochs = config.EPOCHS
-    lr = config.LEARNING_RATE
-    device = config.DEVICE
+    # === Dataset setup ===
+    full_dataset = SyllableDataset(root_dir=DATASET_DIR)
 
-    train_dir = config.TEST_POSITIVE_DIR
-    test_pos_dir = config.TEST_POSITIVE_DIR
-    test_neg_dir = config.TEST_NEGATIVE_DIR
-    checkpoint_dir = config.CHECKPOINT_DIR
-    model_save_path = config.CHECKPOINT_PATH
+    # Create train-val split
+    val_size = int(0.2 * len(full_dataset))
+    train_size = len(full_dataset) - val_size
+    train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size], generator=torch.Generator().manual_seed(42))
 
-    # Create checkpoints folder if not exists
-    os.makedirs(checkpoint_dir, exist_ok=True)
+    # Balance classes in training using WeightedRandomSampler
+    labels = [label for _, label in train_dataset]
+    class_counts = np.bincount(np.array(labels, dtype=int))
+    class_weights = 1.0 / class_counts
+    sample_weights = [class_weights[int(label)] for label in labels]
+    sampler = WeightedRandomSampler(sample_weights, num_samples=len(sample_weights), replacement=True)
 
-    # === Datasets and Loaders ===
-    train_full = SyllableDataset(train_dir, label=1.0)
-    train_size = int(0.8 * len(train_full))
-    val_size = len(train_full) - train_size
-    train_dataset, val_dataset = random_split(
-        train_full, [train_size, val_size], generator=torch.Generator().manual_seed(42)
-    )
+    # DataLoaders
+    train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, sampler=sampler)
+    val_loader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=False)
 
-    test_pos = SyllableDataset(test_pos_dir, label=1.0)
-    test_neg = SyllableDataset(test_neg_dir, label=0.0)
-    test_dataset = ConcatDataset([test_pos, test_neg])
-
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
-
-    # === Model Setup ===
-    model = DeeperCNN().to(device)
+    # === Model setup ===
+    model = DeeperCNN().to(DEVICE)
     criterion = nn.BCEWithLogitsLoss()
-    optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE)
 
-    train_losses, val_losses, test_losses = [], [], []
-    best_val_loss = float('inf')
-    best_model_weights = None
+    # === Training helpers ===
+    best_val_acc = 0.0
+    patience_counter = 0
 
-    def calculate_f1(model, loader):
-        model.eval()
-        all_preds, all_labels = [], []
-        with torch.no_grad():
-            for x, y in loader:
-                x, y = x.to(device), y.to(device)
-                preds = torch.sigmoid(model(x)).round()
-                all_preds.extend(preds.cpu().numpy())
-                all_labels.extend(y.cpu().numpy())
-        return f1_score(all_labels, all_preds)
+    train_acc_list, val_acc_list = [], []
+    train_f1_list, val_f1_list = [], []
+
+    if not os.path.exists(CHECKPOINT_DIR):
+        os.makedirs(CHECKPOINT_DIR)
 
     # === Training Loop ===
-    for epoch in range(epochs):
+    for epoch in range(EPOCHS):
+        print(f"\nEpoch {epoch+1}/{EPOCHS}")
+
+        # Training
         model.train()
+        running_preds, running_labels = [], []
         running_loss = 0.0
 
-        for x, y in train_loader:
-            x, y = x.to(device), y.to(device)
+        train_pbar = tqdm(train_loader, desc="Training", leave=False)
+        for inputs, labels in train_pbar:
+            inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+
             optimizer.zero_grad()
-            outputs = model(x)
-            loss = criterion(outputs, y)
+            outputs = model(inputs)
+            loss = criterion(outputs, labels.unsqueeze(1))
             loss.backward()
             optimizer.step()
+
             running_loss += loss.item()
+            preds = torch.sigmoid(outputs).detach().cpu().round()
+            running_preds.extend(preds.numpy())
+            running_labels.extend(labels.cpu().numpy())
 
-        avg_train_loss = running_loss / len(train_loader)
-        train_losses.append(avg_train_loss)
+        train_acc = accuracy_score(running_labels, running_preds)
+        train_f1 = f1_score(running_labels, running_preds)
+        train_acc_list.append(train_acc)
+        train_f1_list.append(train_f1)
 
+        # Validation
         model.eval()
+        val_preds, val_labels = [], []
         val_loss = 0.0
+
+        val_pbar = tqdm(val_loader, desc="Validation", leave=False)
         with torch.no_grad():
-            for x, y in val_loader:
-                x, y = x.to(device), y.to(device)
-                outputs = model(x)
-                loss = criterion(outputs, y)
+            for inputs, labels in val_pbar:
+                inputs, labels = inputs.to(DEVICE), labels.to(DEVICE)
+
+                outputs = model(inputs)
+                loss = criterion(outputs, labels.unsqueeze(1))
                 val_loss += loss.item()
-        avg_val_loss = val_loss / len(val_loader)
-        val_losses.append(avg_val_loss)
 
-        test_loss = 0.0
-        with torch.no_grad():
-            for x, y in test_loader:
-                x, y = x.to(device), y.to(device)
-                outputs = model(x)
-                loss = criterion(outputs, y)
-                test_loss += loss.item()
-        avg_test_loss = test_loss / len(test_loader)
-        test_losses.append(avg_test_loss)
+                preds = torch.sigmoid(outputs).cpu().round()
+                val_preds.extend(preds.numpy())
+                val_labels.extend(labels.cpu().numpy())
 
-        # F1 scores (optional printout)
-        train_f1 = calculate_f1(model, train_loader)
-        val_f1 = calculate_f1(model, val_loader)
-        test_f1 = calculate_f1(model, test_loader)
+        val_acc = accuracy_score(val_labels, val_preds)
+        val_f1 = f1_score(val_labels, val_preds)
+        val_acc_list.append(val_acc)
+        val_f1_list.append(val_f1)
 
-        print(f"Epoch [{epoch+1}/{epochs}] - "
-              f"Train Loss: {avg_train_loss:.4f}, F1: {train_f1:.4f} | "
-              f"Val Loss: {avg_val_loss:.4f}, F1: {val_f1:.4f} | "
-              f"Test Loss: {avg_test_loss:.4f}, F1: {test_f1:.4f}")
+        print(f"Train Acc: {train_acc:.4f} | Val Acc: {val_acc:.4f} | Train F1: {train_f1:.4f} | Val F1: {val_f1:.4f}")
 
-        if avg_val_loss < best_val_loss:
-            best_val_loss = avg_val_loss
-            best_model_weights = model.state_dict()
+        # === Early Stopping ===
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            patience_counter = 0
+            torch.save(model.state_dict(), CHECKPOINT_PATH)
+            print(">> Best model saved.")
+        else:
+            patience_counter += 1
+            if patience_counter >= 4:
+                print("\nEarly stopping triggered.")
+                break
 
-    # Save best model
-    torch.save(best_model_weights, model_save_path)
-    print(f"Best model saved to {model_save_path}")
+    # === Plot training curves ===
+    epochs_range = range(1, len(train_acc_list) + 1)
 
-    # === Plot Losses ===
-    plt.figure(figsize=(10, 5))
-    plt.plot(train_losses, label='Train Loss')
-    plt.plot(val_losses, label='Validation Loss')
-    plt.plot(test_losses, label='Test Loss')
-    plt.xlabel('Epoch')
-    plt.ylabel('Loss')
-    plt.title('Loss Curves')
-    plt.legend()
-    plt.grid(True)
+    fig, axs = plt.subplots(1, 2, figsize=(12, 5))
+
+    # Accuracy plot
+    axs[0].plot(epochs_range, train_acc_list, label="Train Acc")
+    axs[0].plot(epochs_range, val_acc_list, label="Val Acc")
+    axs[0].set_title("Accuracy over Epochs")
+    axs[0].set_xlabel("Epoch")
+    axs[0].set_ylabel("Accuracy")
+    axs[0].legend()
+    axs[0].grid(True)
+
+    # F1-score plot
+    axs[1].plot(epochs_range, train_f1_list, label="Train F1")
+    axs[1].plot(epochs_range, val_f1_list, label="Val F1")
+    axs[1].set_title("F1 Score over Epochs")
+    axs[1].set_xlabel("Epoch")
+    axs[1].set_ylabel("F1 Score")
+    axs[1].legend()
+    axs[1].grid(True)
+
     plt.tight_layout()
+    plt.savefig(os.path.join(CHECKPOINT_DIR, "training_curves.png"))
+    plt.show()
+
+    # === Confusion Matrix ===
+    final_cm = confusion_matrix(val_labels, val_preds)
+    disp = ConfusionMatrixDisplay(confusion_matrix=final_cm, display_labels=["Non-syllable", "Syllable"])
+    disp.plot(cmap='Blues')
+    plt.title("Validation Confusion Matrix")
+    plt.savefig(os.path.join(CHECKPOINT_DIR, "val_confusion_matrix.png"))
     plt.show()
 
 if __name__ == "__main__":
