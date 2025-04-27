@@ -12,12 +12,12 @@ CHECKPOINT_PATH = os.path.join(CHECKPOINT_DIR, "final_weights.pth")
 # === Training Parameters ===
 BATCH_SIZE = 32
 LEARNING_RATE = 1e-4
-EPOCHS = 50
+EPOCHS = 10
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # === Image Parameters ===
-IMG_HEIGHT = 200
-IMG_WIDTH = 600
+IMG_HEIGHT = 600
+IMG_WIDTH = 200
 INPUT_CHANNELS = 3
 
 # === Make sure checkpoints dir exists ===
