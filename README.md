@@ -41,3 +41,7 @@ Strengths:
 Adaptation:
 - Final fully connected layers tailored for binary classification (syllable vs. background noise).
 - Sigmoid activation at the output ensures direct probability estimates for classification
+
+## Prediction
+The final weights can be downloaded through this drive link
+https://drive.google.com/file/d/1K7dJFGPGKr7kFOKvIfLe3VWl88GIE5b0/view?usp=sharing
