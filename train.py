@@ -1,3 +1,4 @@
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -11,15 +12,19 @@ import config  # ← importing config variables
 
 def train_model():
     # === Load config ===
-    batch_size = config.batch_size
-    epochs = config.epochs
-    lr = config.lr
-    device = config.device
+    batch_size = config.BATCH_SIZE
+    epochs = config.EPOCHS
+    lr = config.LEARNING_RATE
+    device = config.DEVICE
 
-    train_dir = config.train_dir
-    test_pos_dir = config.test_pos_dir
-    test_neg_dir = config.test_neg_dir
-    model_save_path = config.model_save_path
+    train_dir = config.TRAIN_DIR
+    test_pos_dir = config.TEST_POSITIVE_DIR
+    test_neg_dir = config.TEST_NEGATIVE_DIR
+    checkpoint_dir = config.CHECKPOINT_DIR
+    model_save_path = config.CHECKPOINT_PATH
+
+    # Create checkpoints folder if not exists
+    os.makedirs(checkpoint_dir, exist_ok=True)
 
     # === Datasets and Loaders ===
     train_full = SyllableDataset(train_dir, label=1.0)
@@ -61,7 +66,6 @@ def train_model():
     for epoch in range(epochs):
         model.train()
         running_loss = 0.0
-        all_preds, all_labels = [], []
 
         for x, y in train_loader:
             x, y = x.to(device), y.to(device)
@@ -70,11 +74,7 @@ def train_model():
             loss = criterion(outputs, y)
             loss.backward()
             optimizer.step()
-
             running_loss += loss.item()
-            preds = torch.sigmoid(outputs).round()
-            all_preds.extend(preds.cpu().numpy())
-            all_labels.extend(y.cpu().numpy())
 
         avg_train_loss = running_loss / len(train_loader)
         train_losses.append(avg_train_loss)
@@ -100,25 +100,36 @@ def train_model():
         avg_test_loss = test_loss / len(test_loader)
         test_losses.append(avg_test_loss)
 
+        # F1 scores (optional printout)
+        train_f1 = calculate_f1(model, train_loader)
+        val_f1 = calculate_f1(model, val_loader)
+        test_f1 = calculate_f1(model, test_loader)
+
         print(f"Epoch [{epoch+1}/{epochs}] - "
-              f"Train: {avg_train_loss:.4f}, "
-              f"Val: {avg_val_loss:.4f}, "
-              f"Test: {avg_test_loss:.4f}")
+              f"Train Loss: {avg_train_loss:.4f}, F1: {train_f1:.4f} | "
+              f"Val Loss: {avg_val_loss:.4f}, F1: {val_f1:.4f} | "
+              f"Test Loss: {avg_test_loss:.4f}, F1: {test_f1:.4f}")
 
         if avg_val_loss < best_val_loss:
             best_val_loss = avg_val_loss
             best_model_weights = model.state_dict()
 
+    # Save best model
     torch.save(best_model_weights, model_save_path)
+    print(f"Best model saved to {model_save_path}")
 
+    # === Plot Losses ===
     plt.figure(figsize=(10, 5))
     plt.plot(train_losses, label='Train Loss')
     plt.plot(val_losses, label='Validation Loss')
     plt.plot(test_losses, label='Test Loss')
     plt.xlabel('Epoch')
     plt.ylabel('Loss')
-    plt.title('Loss over Epochs')
+    plt.title('Loss Curves')
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+
+if __name__ == "__main__":
+    train_model()
