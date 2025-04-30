@@ -11,8 +11,8 @@ import numpy as np
 import os
 
 from LV_dataset import SyllableDataset
-from LV_model import DeeperCNN
-from LV_config import *
+from model import DeeperCNN
+from config import *
 
 def train_model():
     # === Dataset setup ===

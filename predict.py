@@ -7,9 +7,9 @@ import pandas as pd
 import os
 from tqdm import tqdm
 
-from LV_model import DeeperCNN
-from LV_dataset import SyllableDataset
-from LV_config import *
+from model import DeeperCNN
+from dataset import SyllableDataset
+from config import *
 
 def predict_and_save():
     # Load model
